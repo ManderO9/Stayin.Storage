@@ -43,7 +43,7 @@ app.MapPost("/file", async (context) =>
     var path = storageFolder + fileName + "." + fileExtension;
 
     // Store the file on disc
-    File.WriteAllBytes(path, data);
+    await File.WriteAllBytesAsync(path, data);
 
     // Create file info to store in the database
     var newFile = new FileDetails()
@@ -69,19 +69,24 @@ app.MapPost("/file", async (context) =>
 
 app.MapGet("/file/{fileId}", async (ApplicationDbContext db,IConfiguration configuration, string fileId) =>
 {
+    // Get the file using it's id
     var file = db.Files.FirstOrDefault(x=>x.Id == fileId);
 
+    // If the file is null, it doesn't exist
     if(file is null)
+        // Return not found
         return Results.NotFound();
-
 
     // The folder to store files in (ends with a trailing slash)
     var storageFolder = configuration["StorageFolder"];
 
+    // The path to the file to return
     var path = storageFolder + file.Name + "." + file.Extension;
 
+    // Get the content of the file
     var fileContent = await File.ReadAllBytesAsync(path);
 
+    // Return the file
     return Results.File(fileContent, fileDownloadName: file.Name + "." + file.Extension);
 });
 

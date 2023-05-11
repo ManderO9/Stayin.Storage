@@ -1,6 +1,7 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Stayin.Storage;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,63 +15,70 @@ using var scope = app.Services.CreateScope();
 scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.EnsureCreated();
 
 
-
-// TODO: delete later
-app.MapGet("/", async (context) =>
-{
-
-    context.Response.ContentType = "text/html";
-
-    await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(
-   """
-    <form action="/file" method="post">
-        select a file<input type="file">
-        <input type="submit">
-    </form>
-    """
-    ));
-});
-
-app.MapPost("/file", async (context) =>
-{
-    // The folder to store files in (ends with a trailing slash)
-    var storageFolder = context.RequestServices.GetRequiredService<IConfiguration>()["StorageFolder"];
-
-    // TODO: Get the data to store
-    var data = Encoding.UTF8.GetBytes("some content in the file in form of bytes");
-    var fileExtension = "txt";
-    var fileName = Guid.NewGuid().ToString("N");
-    var path = storageFolder + fileName + "." + fileExtension;
-
-    // Store the file on disc
-    await File.WriteAllBytesAsync(path, data);
-
-    // Create file info to store in the database
-    var newFile = new FileDetails()
+app.MapPost("/file/upload",
+    async (IConfiguration configuration,
+            ApplicationDbContext dbContext,
+            HttpResponse response,
+            [FromBody] FileInformation fileInfo) =>
     {
-        Extension = fileExtension,
-        Id = Guid.NewGuid().ToString("N"),
-        Name = fileName,
-        Size = data.Count()
-    };
+        // The folder to store files in (ends with a trailing slash)
+        var storageFolder = configuration["StorageFolder"];
 
-    // Get the database context
-    var db = context.RequestServices.GetRequiredService<ApplicationDbContext>();
-
-    // Add the file info to the database
-    db.Files.Add(newFile);
-    await db.SaveChangesAsync();
-
-    // Return file id to the caller
-    await context.Response.WriteAsync(newFile.Id);
-});
+        // Create file type provider
+        var fileExtensionProvider = new FileExtensionContentTypeProvider();
 
 
+        // Try get the file extension that maps to the passed in mime type
+        var extensions = fileExtensionProvider.Mappings.Where(x => x.Value.ToLower() == fileInfo.FileType.ToLower());
 
-app.MapGet("/file/{fileId}", async (ApplicationDbContext db,IConfiguration configuration, string fileId) =>
+        // If the passed in mime type is unknown
+        if(extensions.Count() == 0)
+        {
+            // Return an error
+            await response.WriteAsync($"Unknown Mime Type :{fileInfo.FileType}");
+
+            // Set error status code
+            response.StatusCode = StatusCodes.Status400BadRequest;
+
+            // End response here
+            return;
+        }
+
+        // Get file extension
+        var fileExtension = extensions.First().Key;
+
+        // Create a random name for the file
+        var fileName = Guid.NewGuid().ToString("N");
+
+        // Create the path to store the file in
+        var path = storageFolder + fileName + "." + fileExtension;
+
+        // Store the file on disc
+        await File.WriteAllBytesAsync(path, fileInfo.Content);
+
+        // Create file info to store in the database
+        var newFile = new FileDetails()
+        {
+            Extension = fileExtension,
+            Id = Guid.NewGuid().ToString("N"),
+            Name = fileName,
+            Size = fileInfo.Content.Count()
+        };
+
+        // Add the file info to the database
+        dbContext.Files.Add(newFile);
+        await dbContext.SaveChangesAsync();
+
+        // Return file id to the caller
+        await response.WriteAsync(newFile.Id);
+    });
+
+
+
+app.MapGet("/file/{fileId}", async (ApplicationDbContext db, IConfiguration configuration, string fileId) =>
 {
     // Get the file using it's id
-    var file = db.Files.FirstOrDefault(x=>x.Id == fileId);
+    var file = db.Files.FirstOrDefault(x => x.Id == fileId);
 
     // If the file is null, it doesn't exist
     if(file is null)

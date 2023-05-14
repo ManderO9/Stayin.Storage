@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Stayin.Storage;
+using System.Net.Mime;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,31 +28,34 @@ app.MapPost("/file/upload",
         // Create file type provider
         var fileExtensionProvider = new FileExtensionContentTypeProvider();
 
-
         // Try get the file extension that maps to the passed in mime type
-        var extensions = fileExtensionProvider.Mappings.Where(x => x.Value.ToLower() == fileInfo.FileType.ToLower());
+        var extensions = fileExtensionProvider.Mappings.Where(x => x.Value.Equals(fileInfo.FileType, StringComparison.OrdinalIgnoreCase));
 
         // If the passed in mime type is unknown
         if(extensions.Count() == 0)
         {
-            // Return an error
-            await response.WriteAsync($"Unknown Mime Type :{fileInfo.FileType}");
-
             // Set error status code
             response.StatusCode = StatusCodes.Status400BadRequest;
+            
+            // Return an error
+            await response.WriteAsync($"Unknown Mime Type : {fileInfo.FileType}");
 
             // End response here
             return;
         }
-
+        
         // Get file extension
         var fileExtension = extensions.First().Key;
 
+        // Check if it's text and set it directly (cuz multiple mime types have .txt extension)
+        if(extensions.First().Value == MediaTypeNames.Text.Plain)
+            fileExtension = ".txt";
+        
         // Create a random name for the file
         var fileName = Guid.NewGuid().ToString("N");
 
         // Create the path to store the file in
-        var path = storageFolder + fileName + "." + fileExtension;
+        var path = storageFolder + fileName + fileExtension;
 
         // Store the file on disc
         await File.WriteAllBytesAsync(path, fileInfo.Content);
@@ -89,13 +93,13 @@ app.MapGet("/file/{fileId}", async (ApplicationDbContext db, IConfiguration conf
     var storageFolder = configuration["StorageFolder"];
 
     // The path to the file to return
-    var path = storageFolder + file.Name + "." + file.Extension;
+    var path = storageFolder + file.Name + file.Extension;
 
     // Get the content of the file
     var fileContent = await File.ReadAllBytesAsync(path);
 
     // Return the file
-    return Results.File(fileContent, fileDownloadName: file.Name + "." + file.Extension);
+    return Results.File(fileContent, fileDownloadName: file.Name + file.Extension);
 });
 
 app.Run();

@@ -16,7 +16,7 @@ public class FileDetails
     public required string Name { get; set; }
     
     /// <summary>
-    /// File extension of the file
+    /// File extension of the file (starts with a dot)
     /// </summary>
     public required string Extension { get; set; }
 

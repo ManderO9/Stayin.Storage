@@ -7,14 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<ApplicationDbContext>(
     options => options.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
-// TODO: delete later
-var corsPolicy = "someCorsPolicy";
-builder.Services.AddCors((options) =>
-{ options.AddPolicy(corsPolicy, policy => { policy.WithOrigins("*").WithHeaders("*").WithMethods("*"); }); });
-
-
 var app = builder.Build();
-app.UseCors(corsPolicy);
 
 // Ensure database exists
 using var scope = app.Services.CreateScope();

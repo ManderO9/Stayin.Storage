@@ -13,6 +13,11 @@ var app = builder.Build();
 using var scope = app.Services.CreateScope();
 scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.EnsureCreated();
 
+// If we are in production
+if (!app.Environment.IsDevelopment())
+    // Create the folder that will contain the static files
+    Directory.CreateDirectory(app.Configuration["StorageFolder"]!);
+
 
 app.MapPost("/file/upload", async (IConfiguration configuration,
                                    ApplicationDbContext dbContext,
@@ -59,7 +64,7 @@ app.MapGet("/file/{fileId}", async (ApplicationDbContext db, IConfiguration conf
     var file = db.Files.FirstOrDefault(x => x.Id == fileId);
 
     // If the file is null, it doesn't exist
-    if(file is null)
+    if (file is null)
         // Return not found
         return Results.NotFound("The requested file does not exist");
 
